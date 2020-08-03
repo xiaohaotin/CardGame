@@ -28,7 +28,12 @@ public class GameManager : MonoBehaviour
     [SerializeField] Text enemyManaCostText;
     public int playerManaCost;
     public int enemyManaCost;
+    public int playerDefaultManaCost;
+    public int enemyDefaultManaCost;
 
+    //時間管理
+    [SerializeField] Text timeCountText;
+    public int timeCount;
     // シングルトン化(どこからでもアクセスできるようにする)
     public static GameManager instance;
 
@@ -49,8 +54,10 @@ public class GameManager : MonoBehaviour
         resultPanel.SetActive(false);
         playerHeroHp = 1;
         playerManaCost = 1;
+        playerDefaultManaCost = 1;
         enemyHeroHp = 1;
         enemyManaCost = 1;
+        enemyDefaultManaCost = 1;
         ShowHeroHP();
         ShowManaCost();
         SettingInitHand();
@@ -131,6 +138,8 @@ public class GameManager : MonoBehaviour
 
     void TurnCalc()
     {
+        StopAllCoroutines();
+        StartCoroutine(CountDown());
         if (isPlayerTurn)
         {
             PlayerTurn();
@@ -141,18 +150,37 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    
+
+    IEnumerator CountDown()
+    {
+        timeCount = 30;
+        timeCountText.text = timeCount.ToString();
+
+        while (timeCount > 0)
+        {
+            yield return new WaitForSeconds(1);  //1秒待機
+            timeCount--;
+            timeCountText.text = timeCount.ToString();
+        }
+        ChangeTurn();
+    }
+
     public void ChangeTurn()
     {
         isPlayerTurn = !isPlayerTurn;
         if (isPlayerTurn)
         {
+            playerDefaultManaCost++;
+            playerManaCost = playerDefaultManaCost;
             GiveCardToHand(playerDeck,playerHandTransform);
         }
         else
         {
+            enemyDefaultManaCost++;
+            enemyManaCost = enemyDefaultManaCost;
             GiveCardToHand(enemyDeck,enemyHandTransform);
         }
+        ShowManaCost();
         TurnCalc();
     }
     void PlayerTurn()
@@ -181,12 +209,22 @@ public class GameManager : MonoBehaviour
         /* 場にカードを出す */
         //手札のカードリストを取得
         CardController[] handCardList = enemyHandTransform.GetComponentsInChildren<CardController>();
-        
-        //場に出すカードを選択
-        CardController enemyCard = handCardList[0];
-        
-        //カードを移動
-        enemyCard.movement.SetCardTransform(enemyFieldTransform);
+
+        //コスト以下のカードリストを取得
+        CardController[] selectableHandCardList = Array.FindAll(handCardList, card => card.model.cost <= enemyManaCost);
+
+        if (selectableHandCardList.Length > 0)
+        {
+            //場に出すカードを選択
+            CardController enemyCard = selectableHandCardList[0];
+            //カードを移動
+            enemyCard.movement.SetCardTransform(enemyFieldTransform);
+            ReduceManaCost(enemyCard.model.cost, false);
+            enemyCard.model.isFieldCard = true;
+
+        }
+
+
 
 
         /*　攻撃　*/
