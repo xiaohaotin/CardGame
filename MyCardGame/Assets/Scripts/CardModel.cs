@@ -12,6 +12,7 @@ public class CardModel
     public Sprite icon;
     public bool isAlive;
     public bool canAttack;
+    public bool isFieldCard;
     public  CardModel(int cardID)
     {
         CardEntity cardEntity = Resources.Load<CardEntity>("CardEntityList/Card"+cardID);
