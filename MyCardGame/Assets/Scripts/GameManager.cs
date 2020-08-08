@@ -13,7 +13,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] Transform playerHandTransform,playerFieldTransform ,enemyHandTransform,enemyFieldTransform;
     [SerializeField] CardController cardPrefab;
 
-    bool isPlayerTurn;
+    public bool isPlayerTurn;
 
     List<int> playerDeck = new List<int>() { 3, 1, 2, 2 , 3},
               enemyDeck = new List<int>() { 2, 1, 3, 1 , 3};
@@ -23,6 +23,8 @@ public class GameManager : MonoBehaviour
 
     int playerHeroHp;
     int enemyHeroHp;
+
+    [SerializeField] Transform playerHero;
 
     [SerializeField] Text playerManaCostText;
     [SerializeField] Text enemyManaCostText;
@@ -53,11 +55,9 @@ public class GameManager : MonoBehaviour
     {
         resultPanel.SetActive(false);
         playerHeroHp = 1;
-        playerManaCost = 1;
-        playerDefaultManaCost = 1;
+        playerManaCost = playerDefaultManaCost = 10;        
         enemyHeroHp = 1;
-        enemyManaCost = 1;
-        enemyDefaultManaCost = 1;
+        enemyManaCost = enemyDefaultManaCost = 10;        
         ShowHeroHP();
         ShowManaCost();
         SettingInitHand();
@@ -133,7 +133,14 @@ public class GameManager : MonoBehaviour
     {
         //　カードの生成とデータの受け渡し
         CardController card = Instantiate(cardPrefab, hand, false);
-        card.Init(cardID);
+        if (hand.name == "PlayerHand")
+        {
+            card.Init(cardID, true);
+        }
+        else 
+        {
+            card.Init(cardID,false);
+        }
     }
 
     void TurnCalc()
@@ -146,7 +153,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            EnemyTurn();
+            StartCoroutine(EnemyTurn());
         }
     }
 
@@ -165,9 +172,26 @@ public class GameManager : MonoBehaviour
         ChangeTurn();
     }
 
+    public void OnClickTurnEndButton()
+    {
+        if (isPlayerTurn)
+        {
+            ChangeTurn();
+        }
+    }
+
     public void ChangeTurn()
     {
         isPlayerTurn = !isPlayerTurn;
+
+
+        CardController[] playerFieldCardList = playerFieldTransform.GetComponentsInChildren<CardController>();
+        SettingCanAttackView(playerFieldCardList, false);
+
+        CardController[] enemyFieldCardList = enemyFieldTransform.GetComponentsInChildren<CardController>();
+        SettingCanAttackView(enemyFieldCardList, false);
+
+
         if (isPlayerTurn)
         {
             playerDefaultManaCost++;
@@ -183,47 +207,57 @@ public class GameManager : MonoBehaviour
         ShowManaCost();
         TurnCalc();
     }
+
+    void SettingCanAttackView(CardController[] fieldCardList, bool canAttack)
+    {
+        foreach (CardController card in fieldCardList)
+        {
+            card.SetCanAttack(canAttack);
+        }
+    }
+
     void PlayerTurn()
     {
         Debug.Log("Player Turn");
         // フィールドのカードを攻撃可能にする
         CardController[] playerFieldCardList = playerFieldTransform.GetComponentsInChildren<CardController>();
-        foreach (CardController card in playerFieldCardList)
-        {
-            // cardを攻撃可能にする
-            card.SetCanAttack(true);
-        }
+        SettingCanAttackView(playerFieldCardList, true);
     }
 
-    void EnemyTurn()
+    IEnumerator EnemyTurn()
     {
         Debug.Log("Enemy Turn");
         //　フィールドのカードを攻撃可能にする
         CardController[] enemyFieldCardList = enemyFieldTransform.GetComponentsInChildren<CardController>();
-        foreach (CardController card in enemyFieldCardList)
-        {
-            // cardを攻撃可能にする
-            card.SetCanAttack(true);
-        }
+        SettingCanAttackView(enemyFieldCardList,true);
+
+        yield return new WaitForSeconds(1);
 
         /* 場にカードを出す */
         //手札のカードリストを取得
         CardController[] handCardList = enemyHandTransform.GetComponentsInChildren<CardController>();
 
-        //コスト以下のカードリストを取得
-        CardController[] selectableHandCardList = Array.FindAll(handCardList, card => card.model.cost <= enemyManaCost);
-
-        if (selectableHandCardList.Length > 0)
+        //コスト以下のカードがあれば、カードをフィールドに出し続ける
+        while (Array.Exists(handCardList, card => card.model.cost <= enemyManaCost))
         {
+            //コスト以下のカードリストを取得
+            CardController[] selectableHandCardList = Array.FindAll(handCardList, card => card.model.cost <= enemyManaCost);
+            
             //場に出すカードを選択
             CardController enemyCard = selectableHandCardList[0];
             //カードを移動
-            enemyCard.movement.SetCardTransform(enemyFieldTransform);
+            StartCoroutine(enemyCard.movement.MoveToField(enemyFieldTransform));
             ReduceManaCost(enemyCard.model.cost, false);
             enemyCard.model.isFieldCard = true;
-
+            handCardList = enemyHandTransform.GetComponentsInChildren<CardController>();
+            yield return new WaitForSeconds(1);
         }
 
+
+
+       
+
+        yield return new WaitForSeconds(1);
 
 
 
@@ -231,12 +265,12 @@ public class GameManager : MonoBehaviour
         //　フィールドのカードリストを取得
         CardController[] fieldCardList = enemyFieldTransform.GetComponentsInChildren<CardController>();
 
-        //　攻撃可能カードを取得
-        CardController[] enemyCanAttackCardList = Array.FindAll(fieldCardList, card => card.model.canAttack); //検索： Array.FindAll                                                                                                             //　defenderカードを選択(Playerフィールドから選択)
-        CardController[] playerFieldCardList = playerFieldTransform.GetComponentsInChildren<CardController>();
-
-        if (enemyCanAttackCardList.Length > 0 )
+        //攻撃可能カードがあれば攻撃を繰り返す
+        while (Array.Exists(fieldCardList, card => card.model.canAttack))
         {
+            //　攻撃可能カードを取得
+            CardController[] enemyCanAttackCardList = Array.FindAll(fieldCardList, card => card.model.canAttack); //検索： Array.FindAll                                                                                                             //　defenderカードを選択(Playerフィールドから選択)
+            CardController[] playerFieldCardList = playerFieldTransform.GetComponentsInChildren<CardController>();           
             // attackerカードをを選択
             CardController attacker = enemyCanAttackCardList[0];
             if (playerFieldCardList.Length > 0)
@@ -245,15 +279,22 @@ public class GameManager : MonoBehaviour
                 CardController defender = playerFieldCardList[0];
 
                 //attacker　と defender　カードを戦わせる
+                StartCoroutine(attacker.movement.MoveToTarget(defender.transform));
+                yield return new WaitForSeconds(0.25f);
                 CardsBattle(attacker, defender);
             }
             else
             {
-                AttackToHero(attacker,false);
+                StartCoroutine(attacker.movement.MoveToTarget(playerHero));
+                yield return new WaitForSeconds(0.25f);
+                AttackToHero(attacker, false);
+                yield return new WaitForSeconds(0.25f);
+                CheckHeroHp();
             }
+            fieldCardList = enemyFieldTransform.GetComponentsInChildren<CardController>();
+            yield return new WaitForSeconds(1);
         }
-        
-
+        yield return new WaitForSeconds(1);
         ChangeTurn();
     }
 
@@ -290,22 +331,25 @@ public class GameManager : MonoBehaviour
         }
         attacker.SetCanAttack(false);
         ShowHeroHP();
-        CheckHeroHp();
     }
     void CheckHeroHp()
     {
         if (playerHeroHp <= 0 || enemyHeroHp <= 0)
         {
-            resultPanel.SetActive(true);
-            if (playerHeroHp <= 0)
-            {
-                resultText.text = "LOSE";
-            }
-            else
-            {
-                resultText.text = "WIN";
-            }
+            ShowResuluPanel(playerHeroHp);            
         }
     }
-
+    void ShowResuluPanel(int heroHp)
+    {
+        StopAllCoroutines();
+        resultPanel.SetActive(true);
+        if (heroHp <= 0)
+        {
+            resultText.text = "LOSE";
+        }
+        else
+        {
+            resultText.text = "WIN";
+        }
+    }
 }
